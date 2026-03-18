@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Accident Severity Predictor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b0c0f;
+      --surface:   #13151a;
+      --surface2:  #1c1f27;
+      --border:    #2a2d38;
+      --text:      #e8eaf0;
+      --muted:     #6b7080;
+      --accent:    #e8c547;
+      --slight:    #4ade80;
+      --serious:   #fb923c;
+      --fatal:     #f87171;
+      --radius:    12px;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1rem 4rem;
+    }
+
+    /* ── Noise texture overlay ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .wrapper {
+      position: relative;
+      z-index: 1;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      margin-bottom: 2.5rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-badge {
+      background: var(--accent);
+      color: #0b0c0f;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 0.65rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 4px;
+      margin-top: 6px;
+      white-space: nowrap;
+    }
+
+    header h1 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+
+    header h1 span { color: var(--accent); }
+
+    header p {
+      margin-top: 0.4rem;
+      font-size: 0.9rem;
+      color: var(--muted);
+      font-weight: 300;
+    }
+
+    /* ── Result banner ── */
+    .result-banner {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1.2rem 1.5rem;
+      border-radius: var(--radius);
+      margin-bottom: 2rem;
+      border: 1px solid;
+      animation: slideDown 0.4s cubic-bezier(0.22,1,0.36,1);
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-banner.slight  { background: #0d2818; border-color: var(--slight);  }
+    .result-banner.serious { background: #2b1500; border-color: var(--serious); }
+    .result-banner.fatal   { background: #2b0a0a; border-color: var(--fatal);   }
+
+    .result-icon { font-size: 2rem; line-height: 1; }
+
+    .result-label {
+      font-size: 0.7rem;
+      font-family: 'Syne', sans-serif;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+
+    .result-value {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .result-banner.slight  .result-value { color: var(--slight);  }
+    .result-banner.serious .result-value { color: var(--serious); }
+    .result-banner.fatal   .result-value { color: var(--fatal);   }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+    }
+
+    .section-label {
+      font-family: 'Syne', sans-serif;
+      font-size: 0.65rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1.2rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── Grid layout ── */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.2rem;
+    }
+
+    @media (max-width: 580px) { .grid { grid-template-columns: 1fr; } }
+
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field.full { grid-column: 1 / -1; }
+
+    label {
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+
+    select, input[type="number"] {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem;
+      padding: 0.65rem 0.9rem;
+      width: 100%;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+      appearance: none;
+    }
+
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7080' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.9rem center;
+      padding-right: 2.2rem;
+      cursor: pointer;
+    }
+
+    select:focus, input[type="number"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(232,197,71,0.12);
+    }
+
+    select option { background: var(--surface2); }
+
+    /* ── Number inputs row ── */
+    .num-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.2rem;
+      margin-top: 1.4rem;
+    }
+
+    @media (max-width: 580px) { .num-row { grid-template-columns: 1fr; } }
+
+    /* ── Submit button ── */
+    .submit-wrap {
+      margin-top: 2rem;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    button[type="submit"] {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 0.9rem;
+      letter-spacing: 0.04em;
+      background: var(--accent);
+      color: #0b0c0f;
+      border: none;
+      border-radius: 8px;
+      padding: 0.75rem 2.2rem;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+    }
+
+    button[type="submit"]:hover  { opacity: 0.88; }
+    button[type="submit"]:active { transform: scale(0.97); }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: 2.5rem;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Header -->
+  <header>
+    <div class="header-badge">ML Model</div>
+    <div>
+      <h1>Accident <span>Severity</span><br>Predictor</h1>
+      <p>Fill in the 10 road conditions to get an instant severity classification.</p>
+    </div>
+  </header>
+
+  <!-- Result Banner -->
+  {% if submitted %}
+  <div class="result-banner {{ color }}">
+    <div class="result-icon">{{ icon }}</div>
+    <div>
+      <div class="result-label">Predicted Severity</div>
+      <div class="result-value">{{ prediction }}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Form Card -->
+  <div class="card">
+    <div class="section-label">Road Conditions</div>
+
+    <form method="POST" action="/predict">
+
+      <!-- 8 categorical dropdowns in 2-col grid -->
+      <div class="grid">
+
+        <div class="field">
+          <label for="Defect_of_vehicle">Defect of Vehicle</label>
+          <select name="Defect_of_vehicle" id="Defect_of_vehicle" required>
+            <option value="" disabled {% if not submitted %}selected{% endif %}>Select…</option>
+            {% for v in ["No defect", "Lights defect", "Brakes defect", "Steering defect", "Tyres defect", "Other"] %}
+            <option value="{{ v }}" {% if submitted and form_data.get('Defect_of_vehicle')==v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="Age_band_of_driver">Age Band of Driver</label>
+          <select name="Age_band_of_driver" id="Age_band_of_driver" required>
+            <option value="" disabled {% if not submitted %}selected{% endif %}>Select…</option>
+            {% for v in ["Under 18", "18-30", "31-50", "Over 51", "Unknown"] %}
+            <option value="{{ v }}" {% if submitted and form_data.get('Age_band_of_driver')==v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="Road_surface_type">Road Surface Type</label>
+          <select name="Road_surface_type" id="Road_surface_type" required>
+            <option value="" disabled {% if not submitted %}selected{% endif %}>Select…</option>
+            {% for v in ["Asphalt roads", "Earth roads", "Gravel roads", "Asphalt roads with some sand", "Other"] %}
+            <option value="{{ v }}" {% if submitted and form_data.get('Road_surface_type')==v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="Vehicle_driver_relation">Vehicle–Driver Relation</label>
+          <select name="Vehicle_driver_relation" id="Vehicle_driver_relation" required>
+            <option value="" disabled {% if not submitted %}selected{% endif %}>Select…</option>
+            {% for v in ["Owner", "Employee", "Other"] %}
+            <option value="{{ v }}" {% if submitted and form_data.get('Vehicle_driver_relation')==v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="Weather_conditions">Weather Conditions</label>
+          <select name="Weather_conditions" id="Weather_conditions" required>
+            <option value="" disabled {% if not submitted %}selected{% endif %}>Select…</option>
+            {% for v in ["Normal", "Raining", "Raining and Foggy", "Fog or mist", "Cloudy", "Windy", "Snow", "Other"] %}
+            <option value="{{ v }}" {% if submitted and form_data.get('Weather_conditions')==v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="Types_of_Junction">Types of Junction</label>
+          <select name="Types_of_Junction" id="Types_of_Junction" required>
+            <option value="" disabled {% if not submitted %}selected{% endif %}>Select…</option>
+            {% for v in ["No junction", "Y Shape", "T Shape", "Crossing", "O Shape", "Other"] %}
+            <option value="{{ v }}" {% if submitted and form_data.get('Types_of_Junction')==v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="Light_conditions">Light Conditions</label>
+          <select name="Light_conditions" id="Light_conditions" required>
+            <option value="" disabled {% if not submitted %}selected{% endif %}>Select…</option>
+            {% for v in ["Daylight", "Darkness - lights lit", "Darkness - no lighting", "Darkness - lights unlit"] %}
+            <option value="{{ v }}" {% if submitted and form_data.get('Light_conditions')==v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="Day_of_week">Day of Week</label>
+          <select name="Day_of_week" id="Day_of_week" required>
+            <option value="" disabled {% if not submitted %}selected{% endif %}>Select…</option>
+            {% for v in ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"] %}
+            <option value="{{ v }}" {% if submitted and form_data.get('Day_of_week')==v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+      </div><!-- /.grid -->
+
+      <!-- 2 numeric inputs -->
+      <div class="num-row">
+        <div class="field">
+          <label for="Number_of_casualties">Number of Casualties</label>
+          <input
+            type="number" name="Number_of_casualties" id="Number_of_casualties"
+            min="1" max="50" placeholder="e.g. 2" required
+            value="{{ form_data.get('Number_of_casualties', '') if submitted else '' }}"
+          />
+        </div>
+
+        <div class="field">
+          <label for="Number_of_vehicles_involved">Number of Vehicles Involved</label>
+          <input
+            type="number" name="Number_of_vehicles_involved" id="Number_of_vehicles_involved"
+            min="1" max="20" placeholder="e.g. 2" required
+            value="{{ form_data.get('Number_of_vehicles_involved', '') if submitted else '' }}"
+          />
+        </div>
+      </div>
+
+      <div class="submit-wrap">
+        <button type="submit">Predict Severity →</button>
+      </div>
+
+    </form>
+  </div><!-- /.card -->
+
+  <footer>Powered by a trained ML model · Slight · Serious · Fatal</footer>
+
+</div>
+</body>
+</html>
